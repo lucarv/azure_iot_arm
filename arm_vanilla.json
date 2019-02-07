@@ -15,6 +15,7 @@
     "variables": {
         "iotHubKeyName": "iothubowner",
         "asaConsumerGroup": "dispatcher",
+        "tsiConsumerGroup": "timeseries",
         "containerName": "telemetry",
         "streamingJobName": "dispatcher",
         "inputName": "iothub",
@@ -254,12 +255,12 @@
             "type": "Microsoft.TimeSeriesInsights/environments/eventSources",
             "apiVersion": "2017-11-15",
             "location": "[resourceGroup().location]",
-            "kind": "Standard",
+            "kind": "Microsoft.IoTHub",
             "properties": {
                 "eventSourceResourceId": "[resourceId('Microsoft.Devices/IotHubs/', parameters('hubName'))]",
                 "iotHubName": "[parameters('hubName')]",
                 "keyName": "iothubowner",
-                "consumerGroupName": "timeseries",
+                "consumerGroupName": "[variables('tsiConsumerGroup')]",
                 "timestampPropertyName": ""
             },
             "dependsOn": [
@@ -268,3 +269,5 @@
         }
     ]
 }
+
+
