@@ -261,7 +261,8 @@
                 "iotHubName": "[parameters('hubName')]",
                 "keyName": "iothubowner",
                 "consumerGroupName": "[variables('tsiConsumerGroup')]",
-                "timestampPropertyName": ""
+                "timestampPropertyName": "",
+                "sharedAccessKey": "[listkeys(resourceId('Microsoft.Devices/IotHubs/IotHubKeys',parameters('hubName'), 'iothubowner'),'2018-04-01').primaryKey]"
             },
             "dependsOn": [
                 "[concat('Microsoft.TimeSeriesInsights/environments/', parameters('timeSeriesEnvironmentName'))]"
