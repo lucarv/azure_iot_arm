@@ -1,0 +1,270 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "hubName": {
+            "type": "String"
+        },
+        "storageAccountName": {
+            "type": "String"
+        },
+        "timeSeriesEnvironmentName": {
+            "type": "String"
+        }
+    },
+    "variables": {
+        "iotHubKeyName": "iothubowner",
+        "asaConsumerGroup": "dispatcher",
+        "containerName": "telemetry",
+        "streamingJobName": "dispatcher",
+        "inputName": "iothub",
+        "outputName": "blob",
+        "event_source_name": "danfoss_drives"
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Devices/IotHubs",
+            "sku": {
+                "name": "S1",
+                "tier": "Standard",
+                "capacity": 1
+            },
+            "name": "[parameters('hubname')]",
+            "apiVersion": "2018-04-01",
+            "location": "northeurope",
+            "tags": {},
+            "resources": [{
+                "name": "[concat(parameters('hubname'), '/events/', variables('asaConsumerGroup'))]",
+                "type": "Microsoft.Devices/Iothubs/eventhubEndpoints/ConsumerGroups",
+                "apiVersion": "2018-04-01",
+                "dependsOn": [
+                    "[concat('Microsoft.Devices/Iothubs/', parameters('hubname'))]"
+                ],
+                "tags": {
+                    "displayName": "ASA Consumer Group"
+                }
+            }],
+            "scale": null,
+            "properties": {
+                "operationsMonitoringProperties": {
+                    "events": {
+                        "None": "None",
+                        "Connections": "None",
+                        "DeviceTelemetry": "None",
+                        "C2DCommands": "None",
+                        "DeviceIdentityOperations": "None",
+                        "FileUploadOperations": "None",
+                        "Routes": "None"
+                    }
+                },
+                "ipFilterRules": [],
+                "eventHubEndpoints": {
+                    "events": {
+                        "retentionTimeInDays": 1,
+                        "partitionCount": 4,
+                        "partitionIds": [
+                            "0",
+                            "1",
+                            "2",
+                            "3"
+                        ],
+                        "path": "[parameters('hubname')]",
+                        "endpoint": "[concat('sb://iothub-ns-', parameters('hubname'),'-1272054-1f272fffb7.servicebus.windows.net/')]"
+                    },
+                    "operationsMonitoringEvents": {
+                        "retentionTimeInDays": 1,
+                        "partitionCount": 4,
+                        "partitionIds": [
+                            "0",
+                            "1",
+                            "2",
+                            "3"
+                        ],
+                        "path": "[concat(parameters('hubname'),'-operationmonitoring')]",
+                        "endpoint": "[concat('sb://iothub-ns-', parameters('hubname'),'-1272054-1f272fffb7.servicebus.windows.net/')]"
+                    }
+                },
+                "routing": {
+                    "endpoints": {
+                        "serviceBusQueues": [],
+                        "serviceBusTopics": [],
+                        "eventHubs": [],
+                        "storageContainers": []
+                    },
+                    "routes": [],
+                    "fallbackRoute": {
+                        "name": "$fallback",
+                        "source": "DeviceMessages",
+                        "condition": "true",
+                        "endpointNames": [
+                            "events"
+                        ],
+                        "isEnabled": true
+                    }
+                },
+                "storageEndpoints": {
+                    "$default": {
+                        "sasTtlAsIso8601": "PT1H",
+                        "connectionString": "",
+                        "containerName": ""
+                    }
+                },
+                "messagingEndpoints": {
+                    "fileNotifications": {
+                        "lockDurationAsIso8601": "PT1M",
+                        "ttlAsIso8601": "PT1H",
+                        "maxDeliveryCount": 10
+                    }
+                },
+                "enableFileUploadNotifications": false,
+                "cloudToDevice": {
+                    "maxDeliveryCount": 10,
+                    "defaultTtlAsIso8601": "PT1H",
+                    "feedback": {
+                        "lockDurationAsIso8601": "PT1M",
+                        "ttlAsIso8601": "PT1H",
+                        "maxDeliveryCount": 10
+                    }
+                },
+                "features": "None"
+            },
+            "dependsOn": []
+        },
+        {
+            "type": "Microsoft.Storage/storageAccounts",
+            "apiVersion": "2018-07-01",
+            "name": "[parameters('storageAccountName')]",
+            "location": "[resourceGroup().location]",
+            "tags": {
+                "displayName": "[parameters('storageAccountName')]"
+            },
+            "sku": {
+                "name": "Standard_LRS"
+            },
+            "kind": "StorageV2",
+            "properties": {},
+            "resources": [{
+                "type": "blobServices/containers",
+                "apiVersion": "2018-07-01",
+                "name": "[concat('default/', variables('containerName'))]",
+                "dependsOn": [
+                    "[parameters('storageAccountName')]"
+                ],
+                "properties": {
+                    "publicAccess": "Container"
+                }
+            }]
+        },
+        {
+            "type": "Microsoft.StreamAnalytics/StreamingJobs",
+            "apiVersion": "2016-03-01",
+            "name": "[variables('streamingJobName')]",
+            "location": "[resourceGroup().location]",
+            "dependsOn": [
+                "[concat('Microsoft.Devices/IotHubs/', parameters('hubName'))]",
+                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
+            ],
+            "properties": {
+                "sku": {
+                    "name": "standard"
+                },
+                "outputErrorPolicy": "stop",
+                "eventsOutOfOrderPolicy": "adjust",
+                "eventsOutOfOrderMaxDelayInSeconds": 0,
+                "eventsLateArrivalMaxDelayInSeconds": 5,
+                "dataLocale": "en-US",
+                "inputs": [{
+                    "name": "[variables('inputName')]",
+                    "Properties": {
+                        "DataSource": {
+                            "Properties": {
+                                "iotHubNamespace": "[parameters('hubName')]",
+                                "sharedAccessPolicyKey": "[listkeys(resourceId('Microsoft.Devices/IotHubs/IotHubKeys',parameters('hubName'), 'iothubowner'),'2018-04-01').primaryKey]",
+                                "sharedAccessPolicyName": "iothubowner",
+                                "endpoint": "messages/events",
+                                "consumerGroupName": "[variables('asaConsumerGroup')]"
+                            },
+                            "Type": "Microsoft.Devices/IotHubs"
+                        },
+                        "Serialization": {
+                            "Properties": {
+                                "Encoding": "UTF8"
+                            },
+                            "Type": "Json"
+                        },
+                        "Type": "Stream"
+                    }
+                }],
+                "Outputs": [{
+                    "name": "[variables('outputName')]",
+                    "properties": {
+                        "datasource": {
+                            "type": "Microsoft.Storage/Blob",
+                            "properties": {
+                                "blobPathPrefix": "",
+                                "storageAccounts": [{
+                                    "accountName": "[parameters('storageAccountName')]",
+                                    "accountKey": "[listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), providers('Microsoft.Storage', 'storageAccounts').apiVersions[0]).keys[0].value]"
+                                }],
+                                "container": "[variables('containerName')]",
+                                "pathPattern": "",
+                                "dateFormat": "yyyy/MM/dd",
+                                "timeFormat": "HH"
+                            }
+                        },
+                        "serialization": {
+                            "type": "Json",
+                            "properties": {
+                                "encoding": "UTF8",
+                                "format": "Array"
+                            }
+                        }
+                    }
+                }],
+                "transformation": {
+                    "name": "Transformation",
+                    "properties": {
+                        "streamingUnits": 1,
+                        "query": "SELECT\r\n    *\r\nINTO\r\n    [blob]\r\nFROM\r\n    [iothub]"
+                    }
+                }
+            }
+        },
+        {
+            "type": "Microsoft.TimeSeriesInsights/environments",
+            "sku": {
+                "name": "S1",
+                "capacity": 1
+            },
+            "kind": "Standard",
+            "name": "[parameters('timeSeriesEnvironmentName')]",
+            "apiVersion": "2017-11-15",
+            "location": "[resourceGroup().location]",
+            "scale": null,
+            "properties": {
+                "dataRetentionTime": "P30D",
+                "storageLimitExceededBehavior": "PurgeOldData"
+            },
+            "dependsOn": [
+                "[concat('Microsoft.Devices/IotHubs/', parameters('hubName'))]"
+            ]
+        },
+        {
+            "name": "[concat(parameters('timeSeriesEnvironmentName'), '/', variables('event_source_name'))]",
+            "type": "Microsoft.TimeSeriesInsights/environments/eventSources",
+            "apiVersion": "2017-11-15",
+            "location": "[resourceGroup().location]",
+            "kind": "Standard",
+            "properties": {
+                "eventSourceResourceId": "[resourceId('Microsoft.Devices/IotHubs/', parameters('hubName'))]",
+                "iotHubName": "[parameters('hubName')]",
+                "keyName": "iothubowner",
+                "consumerGroupName": "timeseries",
+                "timestampPropertyName": ""
+            },
+            "dependsOn": [
+                "[concat('Microsoft.TimeSeriesInsights/environments/', parameters('timeSeriesEnvironmentName'))]"
+            ]
+        }
+    ]
+}
